@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ShareIt</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1><span class="logo">🚀</span> ShareIt</h1>
+            <div class="device-info">
+                <input type="text" id="device-name" placeholder="Enter device name">
+                <span id="device-id"></span>
+            </div>
+        </header>
+
+        <main>
+            <div class="peers-section">
+                <h2>Available Devices</h2>
+                <div id="peers-list" class="peers-grid">
+                    <div class="no-peers">Searching for devices on your network...</div>
+                </div>
+            </div>
+
+            <div id="messaging-section" class="messaging-section" style="display: none;">
+                <h2>Send a Message</h2>
+                <div class="messages-container">
+                    <div id="messages-list"></div>
+                    <div class="message-input-container">
+                        <input type="text" id="message-input" placeholder="Type a message...">
+                        <button id="send-message-btn">Send</button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="file-section">
+                <input type="file" id="file-input" multiple hidden>
+                <div id="drop-zone" class="drop-zone">
+                    <p>Drag & drop files here or</p>
+                    <button id="select-files" class="file-button">
+                        <span class="icon">📎</span> Select Files
+                    </button>
+                </div>
+                <div id="selected-files"></div>
+            </div>
+
+            <div id="transfers-section" class="transfers-section" style="display: none;">
+                <h2>File Transfers</h2>
+                <div id="transfers-list"></div>
+            </div>
+        </main>
+    </div>
+
+    <div id="notification" class="notification"></div>
+    <div id="connection-error" class="connection-error" style="display: none;"></div>
+
+    <div id="incoming-file-modal" class="modal" style="display: none;">
+        <div class="modal-content">
+            <h3 class="modal-title">Incoming File Transfer</h3>
+            <p id="incoming-file-info"></p>
+            <div class="modal-actions">
+                <button id="accept-transfer" class="btn btn-success">Accept</button>
+                <button id="reject-transfer" class="btn btn-danger">Reject</button>
+            </div>
+        </div>
+    </div>
+
+    <template id="transfer-item-template">
+        <div class="transfer-item">
+            <div class="transfer-info">
+                <div class="transfer-header">
+                    <span class="file-icon"></span>
+                    <strong class="file-name"></strong>
+                    <span class="file-size"></span>
+                </div>
+                <div class="transfer-status"></div>
+                <div class="transfer-progress">
+                    <div class="transfer-progress-bar"></div>
+                </div>
+            </div>
+            <div class="transfer-actions">
+                <button class="cancel-btn">Cancel</button>
+            </div>
+        </div>
+    </template>
+
+    <script src="app.js"></script>
+</body>
+</html>
