@@ -251,6 +251,126 @@ h2 {
     margin-top: 25px;
 }
 
+.file-item.converted {
+    background: #e8f5e8;
+    border-color: #28a745;
+}
+
+.file-item.converted .file-name {
+    color: #28a745;
+    font-weight: 500;
+}
+
+.conversion-section {
+    margin-top: 25px;
+    padding: 20px;
+    background: #f8f9fa;
+    border-radius: 12px;
+    border: 1px solid var(--gray);
+}
+
+.conversion-controls {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+    margin-bottom: 20px;
+}
+
+.conversion-controls select {
+    padding: 8px 12px;
+    border: 2px solid var(--gray);
+    border-radius: 8px;
+    outline: none;
+    transition: border-color 0.3s ease;
+}
+
+.conversion-controls select:focus {
+    border-color: var(--primary-color);
+}
+
+.arrow {
+    font-size: 1.2em;
+    color: #666;
+}
+
+.convert-btn {
+    background: var(--primary-color);
+    color: var(--white);
+    border: none;
+    padding: 8px 16px;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: background 0.3s ease;
+}
+
+.convert-btn:hover {
+    background: var(--secondary-color);
+}
+
+.convert-btn:disabled {
+    background: #ccc;
+    cursor: not-allowed;
+}
+
+.send-original-btn {
+    background: var(--success);
+    color: var(--white);
+    border: none;
+    padding: 8px 16px;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: background 0.3s ease;
+    margin-left: 10px;
+}
+
+.send-original-btn:hover {
+    background: #218838;
+}
+
+#converted-files {
+    margin-top: 15px;
+}
+
+.converted-file-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 15px;
+    background: var(--white);
+    border: 1px solid var(--gray);
+    border-radius: 8px;
+    margin-bottom: 10px;
+}
+
+.converted-file-item .file-info {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.converted-file-item .file-icon {
+    font-size: 1.2em;
+}
+
+.converted-file-item .file-name {
+    font-weight: 500;
+}
+
+.converted-file-item .download-btn {
+    background: var(--success);
+    color: var(--white);
+    border: none;
+    padding: 6px 12px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 0.9em;
+    transition: background 0.3s ease;
+}
+
+.converted-file-item .download-btn:hover {
+    background: #218838;
+}
+
 .transfers-section {
     margin-top: 40px;
     border-top: 1px solid var(--gray);

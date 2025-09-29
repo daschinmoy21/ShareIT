@@ -35,16 +35,38 @@
                 </div>
             </div>
 
-            <div class="file-section">
-                <input type="file" id="file-input" multiple hidden>
-                <div id="drop-zone" class="drop-zone">
-                    <p>Drag & drop files here or</p>
-                    <button id="select-files" class="file-button">
-                        <span class="icon">📎</span> Select Files
-                    </button>
-                </div>
-                <div id="selected-files"></div>
-            </div>
+             <div class="file-section">
+                 <input type="file" id="file-input" multiple hidden>
+                 <div id="drop-zone" class="drop-zone">
+                     <p>Drag & drop files here or</p>
+                     <button id="select-files" class="file-button">
+                         <span class="icon">📎</span> Select Files
+                     </button>
+                 </div>
+                 <div id="selected-files"></div>
+                 <div id="conversion-section" class="conversion-section" style="display: none;">
+                     <h3>Convert Documents</h3>
+                     <p id="conversion-message" style="display: none; color: #666; font-size: 0.9em;">Select a DOCX, ODT, or TXT file to enable conversions</p>
+                     <div class="conversion-controls">
+                         <select id="convert-from-format">
+                             <option value="">Select source format</option>
+                             <option value="docx">DOCX</option>
+                             <option value="odt">ODT</option>
+                             <option value="txt">TXT</option>
+                         </select>
+                         <span class="arrow">→</span>
+                         <select id="convert-to-format">
+                             <option value="">Select target format</option>
+                             <option value="pdf">PDF</option>
+                             <option value="docx">DOCX</option>
+                             <option value="odt">ODT</option>
+                             <option value="txt">TXT</option>
+                         </select>
+                         <button id="convert-btn" class="convert-btn">Convert</button>
+                         <button id="send-original-btn" class="send-original-btn">Send Original</button>
+                     </div>
+                 </div>
+             </div>
 
             <div id="transfers-section" class="transfers-section" style="display: none;">
                 <h2>File Transfers</h2>

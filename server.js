@@ -3,6 +3,12 @@ import { WebSocketServer } from 'ws';
 import { createServer } from 'http';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
+import multer from 'multer';
+import mammoth from 'mammoth';
+import PDFDocument from 'pdfkit';
+import { Document, Packer, Paragraph, TextRun } from 'docx';
+import { TextDocument, Paragraph as ODTParagraph } from 'simple-odf';
+import fs from 'fs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -16,6 +22,17 @@ const PORT = process.env.PORT || 3000;
 const HOST = process.env.HOST || '0.0.0.0';
 const PEER_TIMEOUT = 30000; // 30 seconds
 const CLEANUP_INTERVAL = 10000; // 10 seconds
+
+// --- File Upload Configuration ---
+const upload = multer({
+    limits: { fileSize: 50 * 1024 * 1024 }, // 50MB limit
+    dest: 'uploads/'
+});
+
+// Ensure uploads directory exists
+if (!fs.existsSync('uploads')) {
+    fs.mkdirSync('uploads');
+}
 
 // --- Data Structures ---
 const peers = new Map();
@@ -38,6 +55,140 @@ class Peer {
     }
 }
 
+// --- Document Conversion Functions ---
+async function convertDocxToPdf(buffer) {
+    const result = await mammoth.extractRawText({ buffer });
+    const text = result.value;
+
+    return new Promise((resolve, reject) => {
+        const doc = new PDFDocument();
+        const buffers = [];
+
+        doc.on('data', buffers.push.bind(buffers));
+        doc.on('end', () => resolve(Buffer.concat(buffers)));
+
+        doc.fontSize(12);
+        doc.text(text, 50, 50);
+        doc.end();
+    });
+}
+
+async function convertDocxToTxt(buffer) {
+    const result = await mammoth.extractRawText({ buffer });
+    return result.value;
+}
+
+
+
+async function convertTxtToPdf(text) {
+    return new Promise((resolve, reject) => {
+        const doc = new PDFDocument();
+        const buffers = [];
+
+        doc.on('data', buffers.push.bind(buffers));
+        doc.on('end', () => resolve(Buffer.concat(buffers)));
+
+        doc.fontSize(12);
+        doc.text(text, 50, 50);
+        doc.end();
+    });
+}
+
+async function convertTxtToDocx(text) {
+    const doc = new Document({
+        sections: [{
+            properties: {},
+            children: [
+                new Paragraph({
+                    children: [new TextRun(text)],
+                }),
+            ],
+        }],
+    });
+
+    return Packer.toBuffer(doc);
+}
+
+async function convertOdtToTxt(buffer) {
+    const document = new TextDocument();
+    document.loadFromBuffer(buffer);
+    return document.getBody().getParagraphs().map(p => p.getText()).join('\n');
+}
+
+async function convertOdtToPdf(buffer) {
+    const document = new TextDocument();
+    document.loadFromBuffer(buffer);
+    const text = document.getBody().getParagraphs().map(p => p.getText()).join('\n');
+
+    return new Promise((resolve, reject) => {
+        const doc = new PDFDocument();
+        const buffers = [];
+
+        doc.on('data', buffers.push.bind(buffers));
+        doc.on('end', () => resolve(Buffer.concat(buffers)));
+
+        doc.fontSize(12);
+        doc.text(text, 50, 50);
+        doc.end();
+    });
+}
+
+async function convertOdtToDocx(buffer) {
+    const document = new TextDocument();
+    document.loadFromBuffer(buffer);
+    const text = document.getBody().getParagraphs().map(p => p.getText()).join('\n');
+
+    const doc = new Document({
+        sections: [{
+            properties: {},
+            children: [
+                new Paragraph({
+                    children: [new TextRun(text)],
+                }),
+            ],
+        }],
+    });
+
+    return Packer.toBuffer(doc);
+}
+
+async function convertTxtToOdt(text) {
+    const document = new TextDocument();
+    const paragraph = new ODTParagraph();
+    paragraph.addText(text);
+    document.getBody().addParagraph(paragraph);
+
+    // Return the Flat ODF XML as buffer
+    return Buffer.from(document.toString());
+}
+
+async function convertDocxToOdt(docxBuffer) {
+    const result = await mammoth.extractRawText({ buffer: docxBuffer });
+    const text = result.value;
+
+    const document = new TextDocument();
+    const paragraph = new ODTParagraph();
+    paragraph.addText(text);
+    document.getBody().addParagraph(paragraph);
+
+    // Return the Flat ODF XML as buffer
+    return Buffer.from(document.toString());
+}
+
+async function convertPdfToOdt(pdfBuffer) {
+    // Since we can't read PDF, we'll create an empty ODT for now
+    // In a real implementation, you'd need PDF parsing
+    const document = new TextDocument();
+    const paragraph = new ODTParagraph();
+    paragraph.addText('PDF content extraction not implemented');
+    document.getBody().addParagraph(paragraph);
+
+    // Return the Flat ODF XML as buffer
+    return Buffer.from(document.toString());
+}
+
+
+
 // --- WebServer ---
 app.use(express.static(join(__dirname, 'public')));
 
@@ -57,6 +208,91 @@ app.get('/api/stats', (req, res) => {
         activePeers: activePeers.length,
         peers: activePeers.map(p => ({ id: p.id, name: p.name, ip: p.ip, lastSeen: p.lastSeen })),
     });
+});
+
+// --- Document Conversion API ---
+app.post('/api/convert', upload.single('file'), async (req, res) => {
+    try {
+        if (!req.file) {
+            return res.status(400).json({ error: 'No file uploaded' });
+        }
+
+        const { fromFormat, toFormat } = req.body;
+        const fileBuffer = fs.readFileSync(req.file.path);
+
+        let convertedBuffer;
+        const conversionKey = `${fromFormat}-to-${toFormat}`;
+
+        switch (conversionKey) {
+            case 'docx-to-pdf':
+                convertedBuffer = await convertDocxToPdf(fileBuffer);
+                break;
+            case 'docx-to-txt':
+                convertedBuffer = Buffer.from(await convertDocxToTxt(fileBuffer));
+                break;
+            case 'docx-to-odt':
+                convertedBuffer = await convertDocxToOdt(fileBuffer);
+                break;
+            case 'txt-to-pdf':
+                const text = fileBuffer.toString('utf8');
+                convertedBuffer = await convertTxtToPdf(text);
+                break;
+            case 'txt-to-docx':
+                const txtContent = fileBuffer.toString('utf8');
+                convertedBuffer = await convertTxtToDocx(txtContent);
+                break;
+            case 'txt-to-odt':
+                const txtContent2 = fileBuffer.toString('utf8');
+                convertedBuffer = await convertTxtToOdt(txtContent2);
+                break;
+            case 'odt-to-pdf':
+                convertedBuffer = await convertOdtToPdf(fileBuffer);
+                break;
+            case 'odt-to-txt':
+                convertedBuffer = Buffer.from(await convertOdtToTxt(fileBuffer));
+                break;
+            case 'odt-to-docx':
+                convertedBuffer = await convertOdtToDocx(fileBuffer);
+                break;
+            default:
+                return res.status(400).json({ error: 'Unsupported conversion. Supported: DOCX↔TXT↔ODT, TXT→PDF, DOCX→PDF, ODT→PDF' });
+        }
+
+        // Clean up uploaded file
+        fs.unlinkSync(req.file.path);
+
+        // Set appropriate content type and filename
+        let contentType, filename;
+        switch (toFormat) {
+            case 'pdf':
+                contentType = 'application/pdf';
+                filename = req.file.originalname.replace(/\.[^/.]+$/, '.pdf');
+                break;
+            case 'docx':
+                contentType = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+                filename = req.file.originalname.replace(/\.[^/.]+$/, '.docx');
+                break;
+            case 'txt':
+                contentType = 'text/plain';
+                filename = req.file.originalname.replace(/\.[^/.]+$/, '.txt');
+                break;
+            case 'odt':
+                contentType = 'application/vnd.oasis.opendocument.flat.text';
+                filename = req.file.originalname.replace(/\.[^/.]+$/, '.fodf');
+                break;
+        }
+
+        res.setHeader('Content-Type', contentType);
+        res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+        res.send(convertedBuffer);
+
+    } catch (error) {
+        console.error('Conversion error:', error);
+        if (req.file && fs.existsSync(req.file.path)) {
+            fs.unlinkSync(req.file.path);
+        }
+        res.status(500).json({ error: 'Conversion failed' });
+    }
 });
 
 // --- WebSocket Server ---

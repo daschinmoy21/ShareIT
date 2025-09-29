@@ -40,6 +40,12 @@ class ShareItClient {
             acceptTransferBtn: document.getElementById('accept-transfer'),
             rejectTransferBtn: document.getElementById('reject-transfer'),
             transferItemTemplate: document.getElementById('transfer-item-template'),
+            conversionSection: document.getElementById('conversion-section'),
+            conversionMessage: document.getElementById('conversion-message'),
+            convertFromFormat: document.getElementById('convert-from-format'),
+            convertToFormat: document.getElementById('convert-to-format'),
+            convertBtn: document.getElementById('convert-btn'),
+            sendOriginalBtn: document.getElementById('send-original-btn'),
         };
 
         this.ui.deviceNameInput.value = this.generateDeviceName();
@@ -54,6 +60,10 @@ class ShareItClient {
         this.ui.selectFilesBtn.addEventListener('click', () => this.ui.fileInput.click());
         this.ui.fileInput.addEventListener('change', (e) => this.handleFileSelection(Array.from(e.target.files)));
         this.ui.sendMessageBtn.addEventListener('click', () => this.sendMessageToPeer());
+        this.ui.convertFromFormat.addEventListener('change', () => this.updateConversionUI());
+        this.ui.convertToFormat.addEventListener('change', () => this.updateConversionUI());
+        this.ui.convertBtn.addEventListener('click', () => this.convertFile());
+        this.ui.sendOriginalBtn.addEventListener('click', () => this.sendOriginalFiles());
 
         // Drag and drop
         this.ui.dropZone.addEventListener('dragover', (e) => this.handleDragOver(e));
@@ -155,7 +165,7 @@ class ShareItClient {
     }
 
     setDeviceName() {
-        if (t is.deviceName.trim()) {
+        if (this.deviceName.trim()) {
             this.sendMessage({ type: 'set-name', name: this.deviceName.trim() });
         }
     }
@@ -225,7 +235,15 @@ class ShareItClient {
 
         await this.connectToPeer(peerId);
 
-        if (this.selectedFiles.length > 0) {
+        // Only auto-send if there are files AND no convertible files (conversion UI handles sending)
+        const hasConvertibleFiles = this.selectedFiles.some(file => {
+            const fileName = file.name.toLowerCase();
+            const lastDotIndex = fileName.lastIndexOf('.');
+            const ext = lastDotIndex !== -1 ? fileName.substring(lastDotIndex + 1) : '';
+            return ext === 'docx' || ext === 'odt' || ext === 'txt';
+        });
+
+        if (this.selectedFiles.length > 0 && !hasConvertibleFiles) {
             await this.sendFiles(peerId, this.selectedFiles);
         }
     }
@@ -385,9 +403,19 @@ class ShareItClient {
             }
             return true;
         });
-        this.updateSelectedFilesUI();
 
-        if (this.selectedPeer && this.selectedFiles.length > 0) {
+        this.updateSelectedFilesUI();
+        this.updateConversionUI();
+
+        // Don't auto-send if there are convertible files - let user choose to convert or send
+        const hasConvertibleFiles = this.selectedFiles.some(file => {
+            const fileName = file.name.toLowerCase();
+            const lastDotIndex = fileName.lastIndexOf('.');
+            const ext = lastDotIndex !== -1 ? fileName.substring(lastDotIndex + 1) : '';
+            return ext === 'docx' || ext === 'odt' || ext === 'txt';
+        });
+
+        if (this.selectedPeer && this.selectedFiles.length > 0 && !hasConvertibleFiles) {
             this.sendFiles(this.selectedPeer, this.selectedFiles);
         }
     }
@@ -401,9 +429,9 @@ class ShareItClient {
         this.ui.selectedFiles.innerHTML = `
             <h3>Selected Files (${this.selectedFiles.length})</h3>
             ${this.selectedFiles.map((file, index) => `
-                <div class="file-item">
-                    <span class="file-icon">${this.getFileIcon(file.type)}</span>
-                    <span class="file-name">${this.escapeHtml(file.name)}</span>
+                <div class="file-item ${file.converted ? 'converted' : ''}">
+                    <span class="file-icon">${this.getFileIcon(file.name.split('.').pop())}</span>
+                    <span class="file-name">${this.escapeHtml(file.name)}${file.converted ? ' (converted)' : ''}</span>
                     <span class="file-size">${this.formatFileSize(file.size)}</span>
                     <button onclick="client.removeFile(${index})" class="remove-file-btn">×</button>
                 </div>
@@ -421,11 +449,177 @@ class ShareItClient {
         this.selectedFiles = [];
         this.ui.fileInput.value = '';
         this.updateSelectedFilesUI();
+        this.updateConversionUI();
+    }
+
+    // Conversion Methods
+    updateConversionUI() {
+        const hasConvertibleFiles = this.selectedFiles.some(file => {
+            const fileName = file.name.toLowerCase();
+            const lastDotIndex = fileName.lastIndexOf('.');
+            const ext = lastDotIndex !== -1 ? fileName.substring(lastDotIndex + 1) : '';
+            return ext === 'docx' || ext === 'odt' || ext === 'txt';
+        });
+
+        if (hasConvertibleFiles) {
+            this.ui.conversionSection.style.display = 'block';
+        } else {
+            this.ui.conversionSection.style.display = 'none';
+            return;
+        }
+
+        // Show message if no convertible files
+        if (!hasConvertibleFiles) {
+            this.ui.conversionMessage.style.display = 'block';
+            this.ui.convertBtn.disabled = true;
+            return;
+        } else {
+            this.ui.conversionMessage.style.display = 'none';
+        }
+
+        // Auto-detect source format from selected files
+        const convertibleFiles = this.selectedFiles.filter(file => {
+            const fileName = file.name.toLowerCase();
+            const lastDotIndex = fileName.lastIndexOf('.');
+            const ext = lastDotIndex !== -1 ? fileName.substring(lastDotIndex + 1) : '';
+            return ext === 'docx' || ext === 'odt' || ext === 'txt';
+        });
+
+        if (convertibleFiles.length > 0) {
+            const firstConvertibleFile = convertibleFiles[0];
+            const fileName = firstConvertibleFile.name.toLowerCase();
+            const lastDotIndex = fileName.lastIndexOf('.');
+            const detectedFormat = lastDotIndex !== -1 ? fileName.substring(lastDotIndex + 1) : '';
+
+            // Auto-select the detected format
+            if (detectedFormat && ['docx', 'odt', 'txt'].includes(detectedFormat)) {
+                this.ui.convertFromFormat.value = detectedFormat;
+            }
+        }
+
+        const fromFormat = this.ui.convertFromFormat.value;
+        const toFormat = this.ui.convertToFormat.value;
+
+        // Supported conversions: docx↔txt↔odt, txt→pdf, docx→pdf, odt→pdf
+        const validConversions = [
+            'docx-to-pdf', 'docx-to-txt', 'docx-to-odt',
+            'txt-to-pdf', 'txt-to-docx', 'txt-to-odt',
+            'odt-to-pdf', 'odt-to-txt', 'odt-to-docx'
+        ];
+        const conversionKey = `${fromFormat}-to-${toFormat}`;
+
+        this.ui.convertBtn.disabled = !fromFormat || !toFormat || !validConversions.includes(conversionKey);
+    }
+
+    async convertFile() {
+        const fromFormat = this.ui.convertFromFormat.value;
+        const toFormat = this.ui.convertToFormat.value;
+
+        // Supported conversions: docx↔txt↔odt, txt→pdf, docx→pdf, odt→pdf
+        const validConversions = [
+            'docx-to-pdf', 'docx-to-txt', 'docx-to-odt',
+            'txt-to-pdf', 'txt-to-docx', 'txt-to-odt',
+            'odt-to-pdf', 'odt-to-txt', 'odt-to-docx'
+        ];
+        const conversionKey = `${fromFormat}-to-${toFormat}`;
+
+        if (!validConversions.includes(conversionKey)) {
+            this.showNotification('Unsupported conversion. Supported: DOCX↔TXT↔ODT, TXT→PDF, DOCX→PDF, ODT→PDF', 'warning');
+            return;
+        }
+
+        // Find a file with the selected format
+        const fileToConvert = this.selectedFiles.find(file => {
+            const fileExt = file.name.toLowerCase().split('.').pop();
+            return fileExt === fromFormat;
+        });
+
+        if (!fileToConvert) {
+            this.showNotification(`No ${fromFormat.toUpperCase()} file selected`, 'warning');
+            return;
+        }
+
+        this.ui.convertBtn.disabled = true;
+        this.ui.convertBtn.textContent = 'Converting...';
+
+        try {
+            const formData = new FormData();
+            formData.append('file', fileToConvert);
+            formData.append('fromFormat', fromFormat);
+            formData.append('toFormat', toFormat);
+
+            const response = await fetch('/api/convert', {
+                method: 'POST',
+                body: formData
+            });
+
+            if (!response.ok) {
+                throw new Error('Conversion failed');
+            }
+
+            const blob = await response.blob();
+            const filename = fileToConvert.name.replace(/\.[^/.]+$/, `.${toFormat}`);
+
+            // Replace the original file with the converted file
+            const convertedFile = new File([blob], filename, { type: blob.type });
+            convertedFile.converted = true; // Mark as converted
+            const fileIndex = this.selectedFiles.indexOf(fileToConvert);
+            if (fileIndex !== -1) {
+                this.selectedFiles[fileIndex] = convertedFile;
+                this.updateSelectedFilesUI();
+                this.updateConversionUI();
+            }
+
+            this.showNotification(`File converted to ${toFormat.toUpperCase()}!`, 'success');
+
+        } catch (error) {
+            console.error('Conversion error:', error);
+            this.showNotification('Conversion failed. Please try again.', 'error');
+        } finally {
+            this.ui.convertBtn.disabled = false;
+            this.ui.convertBtn.textContent = 'Convert';
+        }
+    }
+
+
+
+    sendOriginalFiles() {
+        console.log('sendOriginalFiles called');
+        console.log('selectedPeer:', this.selectedPeer);
+        console.log('selectedFiles:', this.selectedFiles.length);
+
+        if (this.selectedPeer && this.selectedFiles.length > 0) {
+            // Ensure we have an active connection before sending
+            const dataChannel = this.dataChannels.get(this.selectedPeer);
+            console.log('dataChannel state:', dataChannel ? dataChannel.readyState : 'no dataChannel');
+
+            if (!dataChannel || dataChannel.readyState !== 'open') {
+                console.log('Reconnecting to peer...');
+                this.connectToPeer(this.selectedPeer).then(() => {
+                    console.log('Reconnected, now sending files');
+                    this.sendFiles(this.selectedPeer, this.selectedFiles);
+                    this.clearSelectedFiles();
+                }).catch(error => {
+                    console.error('Failed to reconnect:', error);
+                    this.showNotification('Connection lost. Please reconnect to the device.', 'error');
+                });
+            } else {
+                this.sendFiles(this.selectedPeer, this.selectedFiles);
+                this.clearSelectedFiles();
+            }
+        } else {
+            this.showNotification('No peer selected or no files to send', 'warning');
+        }
     }
 
     async sendFiles(peerId, files) {
+        console.log('sendFiles called for peer:', peerId);
         const dataChannel = this.dataChannels.get(peerId);
+        console.log('dataChannel exists:', !!dataChannel);
+        console.log('dataChannel readyState:', dataChannel ? dataChannel.readyState : 'N/A');
+
         if (!dataChannel || dataChannel.readyState !== 'open') {
+            console.log('Data channel not ready, attempting to reconnect...');
             this.showNotification('Connection not ready. Please try again.', 'warning');
             return;
         }
@@ -604,12 +798,15 @@ class ShareItClient {
         return '📱';
     }
 
-    getFileIcon(mimeType) {
-        if (mimeType.startsWith('image/')) return '🖼️';
-        if (mimeType.startsWith('video/')) return '🎥';
-        if (mimeType.startsWith('audio/')) return '🎵';
-        if (mimeType.startsWith('text/')) return '📄';
-        if (mimeType.includes('pdf')) return '📕';
+    getFileIcon(mimeTypeOrFormat) {
+        const format = mimeTypeOrFormat.toLowerCase();
+        if (format.startsWith('image/')) return '🖼️';
+        if (format.startsWith('video/')) return '🎥';
+        if (format.startsWith('audio/')) return '🎵';
+        if (format.startsWith('text/') || format === 'txt') return '📄';
+        if (format.includes('pdf') || format === 'pdf') return '📕';
+        if (format === 'docx') return '📝';
+        if (format === 'odt' || format === 'fodf') return '📄';
         return '📎';
     }
 
