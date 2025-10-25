@@ -220,11 +220,11 @@ class ShareItClient {
         const isConnected = this.connections.has(peer.id);
         const isSelected = this.selectedPeer === peer.id;
         return `
-            <div class="peer-card ${isConnected ? 'connected' : ''} ${isSelected ? 'selected' : ''}" onclick="client.handlePeerClick('${peer.id}')">
-                <div class="peer-avatar">${this.getPeerIcon(peer)}</div>
-                <div class="peer-name">${this.escapeHtml(peer.name)}</div>
-                <div class="peer-status">${isConnected ? '🟢 Connected' : '🔵 Available'}</div>
-            </div>
+            <button class="w-full text-left bg-orange-600 hover:bg-orange-700 border border-orange-500 rounded-lg p-4 cursor-pointer transition ${isSelected ? 'ring-2 ring-white bg-orange-700' : ''}" onclick="client.handlePeerClick('${peer.id}')">
+                <div class="text-2xl mb-2">${this.getPeerIcon(peer)}</div>
+                <div class="font-medium">${this.escapeHtml(peer.name)}</div>
+                <div class="text-sm">${isConnected ? '🟢 Connected' : '🔵 Available'}</div>
+            </button>
         `;
     }
 
@@ -235,15 +235,8 @@ class ShareItClient {
 
         await this.connectToPeer(peerId);
 
-        // Only auto-send if there are files AND no convertible files (conversion UI handles sending)
-        const hasConvertibleFiles = this.selectedFiles.some(file => {
-            const fileName = file.name.toLowerCase();
-            const lastDotIndex = fileName.lastIndexOf('.');
-            const ext = lastDotIndex !== -1 ? fileName.substring(lastDotIndex + 1) : '';
-            return ext === 'docx' || ext === 'odt' || ext === 'txt';
-        });
-
-        if (this.selectedFiles.length > 0 && !hasConvertibleFiles) {
+        // Auto-send files if they exist (conversion UI is optional)
+        if (this.selectedFiles.length > 0) {
             await this.sendFiles(peerId, this.selectedFiles);
         }
     }
@@ -388,7 +381,11 @@ class ShareItClient {
 
     displayMessage(message, type) {
         const messageElement = document.createElement('div');
-        messageElement.className = `message ${type}`;
+        if (type === 'sent') {
+            messageElement.className = 'p-3 rounded-2xl rounded-br-none bg-orange-500 text-white self-end max-w-xs mb-2';
+        } else {
+            messageElement.className = 'p-3 rounded-2xl rounded-bl-none bg-gray-600 text-white self-start max-w-xs mb-2';
+        }
         messageElement.textContent = message;
         this.ui.messagesList.appendChild(messageElement);
         this.ui.messagesList.scrollTop = this.ui.messagesList.scrollHeight;
@@ -415,9 +412,8 @@ class ShareItClient {
             return ext === 'docx' || ext === 'odt' || ext === 'txt';
         });
 
-        if (this.selectedPeer && this.selectedFiles.length > 0 && !hasConvertibleFiles) {
-            this.sendFiles(this.selectedPeer, this.selectedFiles);
-        }
+        // Files will be sent when a peer is selected (in handlePeerClick)
+        // This prevents double-sending
     }
 
     updateSelectedFilesUI() {
@@ -648,22 +644,50 @@ class ShareItClient {
         this.ui.incomingFileInfo.textContent = `From: ${this.peers.get(peerId)?.name} (${this.formatFileSize(fileSize)}) - ${fileName}`;
         this.ui.incomingFileModal.style.display = 'flex';
 
+        // Remove any existing event listeners to prevent conflicts
+        const acceptBtn = this.ui.acceptTransferBtn;
+        const rejectBtn = this.ui.rejectTransferBtn;
+
+        const newAcceptBtn = acceptBtn.cloneNode(true);
+        const newRejectBtn = rejectBtn.cloneNode(true);
+
+        acceptBtn.parentNode.replaceChild(newAcceptBtn, acceptBtn);
+        rejectBtn.parentNode.replaceChild(newRejectBtn, rejectBtn);
+
+        this.ui.acceptTransferBtn = newAcceptBtn;
+        this.ui.rejectTransferBtn = newRejectBtn;
+
         const accept = () => {
+            console.log('Accepting file transfer:', transferId);
+            // Immediately close modal and disable buttons
+            this.ui.incomingFileModal.style.display = 'none';
+            this.ui.acceptTransferBtn.disabled = true;
+            this.ui.rejectTransferBtn.disabled = true;
+
             this.activeTransfers.set(transferId, { fileName, fileSize, peerId, type: 'incoming', chunks: [], receivedSize: 0 });
             this.addTransferToUI(transferId, fileName, fileSize, 'incoming');
             const dataChannel = this.dataChannels.get(peerId);
-            dataChannel.send(JSON.stringify({ type: 'file-accept', transferId }));
-            this.ui.incomingFileModal.style.display = 'none';
+            if (dataChannel && dataChannel.readyState === 'open') {
+                dataChannel.send(JSON.stringify({ type: 'file-accept', transferId }));
+                console.log('Sent file-accept message');
+                this.showNotification('File transfer accepted', 'info');
+            } else {
+                console.error('Data channel not available for accepting transfer');
+                this.showNotification('Connection lost. Transfer may fail.', 'warning');
+            }
         };
 
         const reject = () => {
+            console.log('Rejecting file transfer:', transferId);
             const dataChannel = this.dataChannels.get(peerId);
-            dataChannel.send(JSON.stringify({ type: 'file-reject', transferId }));
+            if (dataChannel && dataChannel.readyState === 'open') {
+                dataChannel.send(JSON.stringify({ type: 'file-reject', transferId }));
+            }
             this.ui.incomingFileModal.style.display = 'none';
         };
 
-        this.ui.acceptTransferBtn.addEventListener('click', accept, { once: true });
-        this.ui.rejectTransferBtn.addEventListener('click', reject, { once: true });
+        this.ui.acceptTransferBtn.addEventListener('click', accept);
+        this.ui.rejectTransferBtn.addEventListener('click', reject);
     }
 
     handleFileReject(transferId) {

@@ -14,6 +14,7 @@
     "typescript": "^5"
   },
   "dependencies": {
+    "adm-zip": "^0.5.10",
     "docx": "^8.5.0",
     "express": "^5.1.0",
     "mammoth": "^1.6.0",
@@ -21,6 +22,7 @@
     "pdf2pic": "^3.2.0",
     "pdfkit": "^0.15.0",
     "simple-odf": "^3.0.3",
-    "ws": "^8.18.3"
+    "ws": "^8.18.3",
+    "xml2js": "^0.6.2"
   }
 }

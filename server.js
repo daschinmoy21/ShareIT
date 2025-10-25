@@ -8,7 +8,10 @@ import mammoth from 'mammoth';
 import PDFDocument from 'pdfkit';
 import { Document, Packer, Paragraph, TextRun } from 'docx';
 import { TextDocument, Paragraph as ODTParagraph } from 'simple-odf';
+import AdmZip from 'adm-zip';
+import xml2js from 'xml2js';
 import fs from 'fs';
+import os from 'os';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -61,14 +64,21 @@ async function convertDocxToPdf(buffer) {
     const text = result.value;
 
     return new Promise((resolve, reject) => {
-        const doc = new PDFDocument();
+        const doc = new PDFDocument({
+            size: 'A4',
+            margins: { top: 50, bottom: 50, left: 50, right: 50 }
+        });
         const buffers = [];
 
         doc.on('data', buffers.push.bind(buffers));
         doc.on('end', () => resolve(Buffer.concat(buffers)));
 
         doc.fontSize(12);
-        doc.text(text, 50, 50);
+        doc.text(text, {
+            width: 500,
+            align: 'left',
+            lineGap: 5
+        });
         doc.end();
     });
 }
@@ -82,14 +92,21 @@ async function convertDocxToTxt(buffer) {
 
 async function convertTxtToPdf(text) {
     return new Promise((resolve, reject) => {
-        const doc = new PDFDocument();
+        const doc = new PDFDocument({
+            size: 'A4',
+            margins: { top: 50, bottom: 50, left: 50, right: 50 }
+        });
         const buffers = [];
 
         doc.on('data', buffers.push.bind(buffers));
         doc.on('end', () => resolve(Buffer.concat(buffers)));
 
         doc.fontSize(12);
-        doc.text(text, 50, 50);
+        doc.text(text, {
+            width: 500,
+            align: 'left',
+            lineGap: 5
+        });
         doc.end();
     });
 }
@@ -110,33 +127,104 @@ async function convertTxtToDocx(text) {
 }
 
 async function convertOdtToTxt(buffer) {
-    const document = new TextDocument();
-    document.loadFromBuffer(buffer);
-    return document.getBody().getParagraphs().map(p => p.getText()).join('\n');
+    try {
+        const xmlContent = buffer.toString('utf8');
+        const parser = new xml2js.Parser();
+        let result;
+
+        if (buffer[0] === 0x50 && buffer[1] === 0x4B) { // ZIP file (standard ODT)
+            const zip = new AdmZip(buffer);
+            const contentXml = zip.readAsText('content.xml');
+            if (!contentXml) throw new Error('No content.xml in ODT');
+            result = await parser.parseStringPromise(contentXml);
+            const paragraphs = result['office:document-content']['office:body'][0]['office:text'][0]['text:p'] || [];
+            return paragraphs.map(p => extractTextFromXml(p)).join('\n');
+        } else {
+            // Flat ODF
+            result = await parser.parseStringPromise(xmlContent);
+            const paragraphs = result['office:document']['office:body'][0]['office:text'][0]['text:p'] || [];
+            return paragraphs.map(p => extractTextFromXml(p)).join('\n');
+        }
+    } catch (error) {
+        console.error('ODT parsing error:', error);
+        return 'Error parsing ODT file';
+    }
+}
+
+function extractTextFromXml(p) {
+    if (typeof p === 'string') return p;
+    if (p._) return p._;
+    if (p['text:span']) {
+        return p['text:span'].map(span => span._ || span).join('');
+    }
+    return '';
 }
 
 async function convertOdtToPdf(buffer) {
-    const document = new TextDocument();
-    document.loadFromBuffer(buffer);
-    const text = document.getBody().getParagraphs().map(p => p.getText()).join('\n');
+    const text = await convertOdtToTxt(buffer);
 
     return new Promise((resolve, reject) => {
-        const doc = new PDFDocument();
+        const doc = new PDFDocument({
+            size: 'A4',
+            margins: { top: 50, bottom: 50, left: 50, right: 50 }
+        });
         const buffers = [];
 
         doc.on('data', buffers.push.bind(buffers));
         doc.on('end', () => resolve(Buffer.concat(buffers)));
 
         doc.fontSize(12);
-        doc.text(text, 50, 50);
+        doc.text(text, {
+            width: 500,
+            align: 'left',
+            lineGap: 5
+        });
         doc.end();
     });
 }
 
 async function convertOdtToDocx(buffer) {
-    const document = new TextDocument();
-    document.loadFromBuffer(buffer);
-    const text = document.getBody().getParagraphs().map(p => p.getText()).join('\n');
+    const text = await convertOdtToTxt(buffer);
+
+    const doc = new Document({
+        sections: [{
+            properties: {},
+            children: [
+                new Paragraph({
+                    children: [new TextRun(text)],
+                }),
+            ],
+        }],
+    });
+
+    return Packer.toBuffer(doc);
+}
+
+async function convertOdtToPdf(buffer) {
+    const text = await convertOdtToTxt(buffer);
+
+    return new Promise((resolve, reject) => {
+        const doc = new PDFDocument({
+            size: 'A4',
+            margins: { top: 50, bottom: 50, left: 50, right: 50 }
+        });
+        const buffers = [];
+
+        doc.on('data', buffers.push.bind(buffers));
+        doc.on('end', () => resolve(Buffer.concat(buffers)));
+
+        doc.fontSize(12);
+        doc.text(text, {
+            width: 500,
+            align: 'left',
+            lineGap: 5
+        });
+        doc.end();
+    });
+}
+
+async function convertOdtToDocx(buffer) {
+    const text = await convertOdtToTxt(buffer);
 
     const doc = new Document({
         sections: [{
@@ -176,15 +264,7 @@ async function convertDocxToOdt(docxBuffer) {
 }
 
 async function convertPdfToOdt(pdfBuffer) {
-    // Since we can't read PDF, we'll create an empty ODT for now
-    // In a real implementation, you'd need PDF parsing
-    const document = new TextDocument();
-    const paragraph = new ODTParagraph();
-    paragraph.addText('PDF content extraction not implemented');
-    document.getBody().addParagraph(paragraph);
-
-    // Return the Flat ODF XML as buffer
-    return Buffer.from(document.toString());
+    throw new Error('PDF to ODT conversion is not supported');
 }
 
 
@@ -310,7 +390,11 @@ wss.on('connection', (ws, req) => {
         name: peer.name,
         ip: peer.ip,
         // TODO: Add TURN server configuration here
-        iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
+        iceServers: [
+            { urls: 'stun:stun.l.google.com:19302' },
+            { urls: 'stun:stun1.l.google.com:19302' },
+            { urls: 'stun:stun2.l.google.com:19302' }
+        ]
     }));
 
     broadcastPeerList();
@@ -337,6 +421,7 @@ function handleMessage(sender, data) {
             case 'offer':
             case 'answer':
             case 'ice-candidate':
+            case 'reject':
             case 'cancel-transfer':
             case 'text': // Added for text messaging
                 forwardSignalingMessage(sender.id, message);
@@ -424,8 +509,34 @@ function getClientIP(req) {
 }
 
 // --- Server Start & Shutdown ---
-server.listen(PORT, HOST, () => {
+function getLocalIP() {
+    const interfaces = os.networkInterfaces();
+    for (const name of Object.keys(interfaces)) {
+        for (const iface of interfaces[name]) {
+            if (iface.family === 'IPv4' && !iface.internal) {
+                return iface.address;
+            }
+        }
+    }
+    return '127.0.0.1';
+}
+
+async function getPublicIP() {
+    try {
+        const res = await fetch('https://api.ipify.org?format=json');
+        const data = await res.json();
+        return data.ip;
+    } catch (error) {
+        return 'Unable to fetch public IP';
+    }
+}
+
+server.listen(PORT, HOST, async () => {
+    const localIP = getLocalIP();
     console.log(`🚀 ShareIt server running on http://${HOST}:${PORT}`);
+    console.log(`🏠 Local access: http://${localIP}:${PORT}`);
+    const publicIP = await getPublicIP();
+    console.log(`🌐 Public IP: ${publicIP}`);
     setInterval(cleanupInactivePeers, CLEANUP_INTERVAL);
 });
 
