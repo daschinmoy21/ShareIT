@@ -1,3 +1,33 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* Ensure selected files text is readable in dark theme */
+#selected-files {
+    color: #f3f4f6; /* gray-100 */
+}
+
+#selected-files h3 {
+    color: #f3f4f6; /* gray-100 */
+}
+
+#selected-files .file-name {
+    color: #f3f4f6; /* gray-100 */
+}
+
+#selected-files .file-size {
+    color: #d1d5db; /* gray-300 */
+}
+
+/* Ensure notification text is white */
+#notification {
+    color: #ffffff !important;
+}
+
+/* Ensure download button is visible */
+#selected-files button[title="Download"] {
+    background-color: rgba(59, 130, 246, 0.1);
+    border: 1px solid #3b82f6;
+    padding: 2px 6px;
+    border-radius: 4px;
+}

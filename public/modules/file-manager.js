@@ -2,11 +2,12 @@ import { Utils } from './utils.js';
 
 // File Management and Transfer
 export class FileManager {
-    constructor(onSendMessage, onNotification) {
+    constructor(onSendMessage, onNotification, uiManager) {
         this.selectedFiles = [];
         this.activeTransfers = new Map();
         this.onSendMessage = onSendMessage;
         this.onNotification = onNotification;
+        this.uiManager = uiManager;
     }
 
     handleFileSelection(files) {
@@ -29,18 +30,25 @@ export class FileManager {
         }
 
         ui.selectedFiles.innerHTML = `
-            <h3 class="text-lg font-medium text-white mb-3">Selected Files (${this.selectedFiles.length})</h3>
-            ${this.selectedFiles.map((file, index) => `
-                <div class="flex items-center justify-between p-3 bg-gray-700 rounded-md ${file.converted ? 'bg-green-900 border border-green-600' : ''}">
-                    <div class="flex items-center gap-3">
-                        <span class="text-lg">${Utils.getFileIcon(file.name.split('.').pop())}</span>
-                        <span class="font-medium text-white">${Utils.escapeHtml(file.name)}${file.converted ? ' (converted)' : ''}</span>
-                        <span class="text-sm text-gray-400">${Utils.formatFileSize(file.size)}</span>
+            <div class="flex items-center justify-between mb-2">
+                <h3 class="text-lg font-medium text-gray-100">Selected Files (${this.selectedFiles.length})</h3>
+                <button onclick="${onClearFiles}()" class="bg-red-600 hover:bg-red-700 text-white px-3 py-1 rounded-md transition text-sm">Clear All</button>
+            </div>
+            <div class="space-y-1">
+                ${this.selectedFiles.map((file, index) => `
+                    <div class="flex items-center justify-between p-2 bg-gray-700 rounded-md hover:bg-gray-600 transition ${file.converted ? 'bg-green-900 border border-green-600' : ''}">
+                        <div class="flex items-center gap-2 flex-1 min-w-0">
+                            <span class="text-base flex-shrink-0">${Utils.getFileIcon(file.name.split('.').pop())}</span>
+                            <span class="file-name font-medium truncate">${Utils.escapeHtml(file.name)}${file.converted ? ' (converted)' : ''}</span>
+                            <span class="file-size text-xs flex-shrink-0">${Utils.formatFileSize(file.size)}</span>
+                        </div>
+                        <div class="flex items-center gap-1 flex-shrink-0 ml-2">
+                            <button onclick="client.downloadFile(${index})" class="bg-blue-500 hover:bg-blue-600 text-white px-2 py-1 rounded transition text-sm">Download</button>
+                            <button onclick="client.removeFile(${index})" class="text-red-400 hover:text-red-300 transition">×</button>
+                        </div>
                     </div>
-                    <button onclick="${onRemoveFile}(${index})" class="text-red-400 hover:text-red-300 transition">×</button>
-                </div>
-            `).join('')}
-            <button onclick="${onClearFiles}()" class="mt-3 bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-md transition">Clear All</button>
+                `).join('')}
+            </div>
         `;
     }
 
@@ -50,6 +58,20 @@ export class FileManager {
 
     clearSelectedFiles() {
         this.selectedFiles = [];
+    }
+
+    downloadFile(index) {
+        const file = this.selectedFiles[index];
+        if (!file) return;
+
+        const url = URL.createObjectURL(file);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = file.name;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
     }
 
     hasConvertibleFiles() {
@@ -222,6 +244,11 @@ export class FileManager {
     }
 
     completeTransfer(transferId) {
+        const transfer = this.activeTransfers.get(transferId);
+        if (transfer) {
+            const status = transfer.type === 'incoming' ? 'Completed' : 'Sent';
+            this.uiManager.updateTransferStatus(transferId, status);
+        }
         this.activeTransfers.delete(transferId);
     }
 

@@ -233,6 +233,12 @@ export class UIManager {
         const item = document.getElementById(`transfer-${transferId}`);
         if (item) {
             item.querySelector('.transfer-status').textContent = status;
+            const cancelBtn = item.querySelector('.cancel-btn');
+            if (status.includes('Completed') || status.includes('Sent') || status === 'Failed' || status.includes('Canceled')) {
+                cancelBtn.style.display = 'none';
+            } else {
+                cancelBtn.style.display = 'inline-block';
+            }
         }
     }
 
@@ -268,8 +274,8 @@ export class UIManager {
             this.ui.incomingFileModal.style.display = 'none';
         };
 
-        this.ui.acceptTransferBtn.addEventListener('click', accept, { once: true });
-        this.ui.rejectTransferBtn.addEventListener('click', reject, { once: true });
+        this.ui.acceptTransferBtn.addEventListener('click', accept);
+        this.ui.rejectTransferBtn.addEventListener('click', reject);
     }
 
     showConnectionRequestModal(peerName, peerId, onAccept, onReject) {
@@ -286,7 +292,7 @@ export class UIManager {
             this.ui.connectionRequestModal.style.display = 'none';
         };
 
-        this.ui.acceptConnectionBtn.addEventListener('click', accept, { once: true });
-        this.ui.rejectConnectionBtn.addEventListener('click', reject, { once: true });
+        this.ui.acceptConnectionBtn.addEventListener('click', accept);
+        this.ui.rejectConnectionBtn.addEventListener('click', reject);
     }
 }

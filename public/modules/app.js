@@ -16,7 +16,8 @@ export class ShareItClient {
         this.uiManager = new UIManager();
         this.fileManager = new FileManager(
             (message) => this.wsManager.sendMessage(message),
-            (message, type) => this.uiManager.showNotification(message, type)
+            (message, type) => this.uiManager.showNotification(message, type),
+            this.uiManager
         );
 
         this.wsManager = new WebSocketManager(
@@ -258,9 +259,12 @@ export class ShareItClient {
 
     clearSelectedFiles() {
         this.fileManager.clearSelectedFiles();
-        this.uiManager.clearFileInput();
         this.updateSelectedFilesUI();
         this.updateConversionUI();
+    }
+
+    downloadFile(index) {
+        this.fileManager.downloadFile(index);
     }
 
     // Conversion
