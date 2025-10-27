@@ -12,16 +12,38 @@ import AdmZip from 'adm-zip';
 import xml2js from 'xml2js';
 import fs from 'fs';
 import os from 'os';
+import helmet from 'helmet';
+import cors from 'cors';
+import rateLimit from 'express-rate-limit';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
 const app = express();
+// // app.use(helmet({
+//     contentSecurityPolicy: {
+//         directives: {
+//             defaultSrc: ["'self'"],
+//             scriptSrc: ["'self'", "'unsafe-inline'", "https://cdn.tailwindcss.com"],
+//             styleSrc: ["'self'", "'unsafe-inline'"],
+//             imgSrc: ["'self'", "data:"],
+//             connectSrc: ["'self'", "ws:", "https:"],
+//         },
+//     },
+//     crossOriginOpenerPolicy: false,
+//     crossOriginEmbedderPolicy: false,
+// }));
+app.use(cors());
+const limiter = rateLimit({
+    windowMs: 15 * 60 * 1000, // 15 minutes
+    max: 100, // limit each IP to 100 requests per windowMs
+});
+app.use(limiter);
 const server = createServer(app);
 const wss = new WebSocketServer({ server });
 
 // --- Configuration ---
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 3003;
 const HOST = process.env.HOST || '0.0.0.0';
 const PEER_TIMEOUT = 30000; // 30 seconds
 const CLEANUP_INTERVAL = 10000; // 10 seconds
@@ -29,7 +51,21 @@ const CLEANUP_INTERVAL = 10000; // 10 seconds
 // --- File Upload Configuration ---
 const upload = multer({
     limits: { fileSize: 50 * 1024 * 1024 }, // 50MB limit
-    dest: 'uploads/'
+    dest: 'uploads/',
+    fileFilter: (req, file, cb) => {
+        const allowedTypes = [
+            'application/pdf',
+            'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+            'text/plain',
+            'application/vnd.oasis.opendocument.text',
+            'application/vnd.oasis.opendocument.flat.text'
+        ];
+        if (allowedTypes.includes(file.mimetype)) {
+            cb(null, true);
+        } else {
+            cb(new Error('Invalid file type'));
+        }
+    }
 });
 
 // Ensure uploads directory exists
@@ -286,7 +322,7 @@ app.get('/api/stats', (req, res) => {
     res.json({
         totalPeers: peers.size,
         activePeers: activePeers.length,
-        peers: activePeers.map(p => ({ id: p.id, name: p.name, ip: p.ip, lastSeen: p.lastSeen })),
+        peers: activePeers.map(p => ({ id: p.id, name: p.name, lastSeen: p.lastSeen })),
     });
 });
 

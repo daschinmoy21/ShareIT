@@ -1,4 +1,3 @@
-// Mock globals for testing
 global.fetch = jest.fn();
 global.document = { querySelector: jest.fn() };
 
