@@ -5,10 +5,12 @@
   "private": true,
   "scripts": {
     "start": "bun server.js",
-    "dev": "bun --hot server.js"
+    "dev": "bun --hot server.js",
+    "test": "bun test"
   },
   "devDependencies": {
-    "@types/bun": "latest"
+    "@types/bun": "latest",
+    "jest": "^29.7.0"
   },
   "peerDependencies": {
     "typescript": "^5"
